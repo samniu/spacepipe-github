@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+.DS_Store
+web_logs/
+*.wav
+*.m4a
+*.json
+*.csv
+*.rttm
+*.srt
+transcripts/
+summaries/
+speakers/
+topics/
+spaces/

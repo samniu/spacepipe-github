@@ -1,0 +1,6 @@
+faster-whisper
+pyannote.audio
+sentence-transformers
+ruptures
+torch
+torchaudio
