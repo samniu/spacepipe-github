@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # 用法: ./downloader.sh <space_url> [browser] [out_root]
-# 例子: ./downloader.sh "https://twitter.com/i/spaces/XXXX" chrome /Users/niushumin/Downloads/spaces
+# 例子: ./downloader.sh "https://twitter.com/i/spaces/XXXX" chrome "$HOME/Downloads/spaces"
 
 SPACEURL="${1:-}"
 BROWSER="${2:-chrome}"   # 默认 chrome，可改 firefox/edge/...
