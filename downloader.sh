@@ -34,13 +34,31 @@ wget "$STREAM" -O "$TEMP_DIR/stream.m3u8"
 
 # 有的 m3u8 是相对路径，先推全，再下载到临时目录
 STREAMPATH=$(echo "$STREAM" | grep -Eo "(^.*[\/])" || true)
-sed -E "s|(^[^.#]+\.aac$)|$STREAMPATH\1|g" "$TEMP_DIR/stream.m3u8" > "$TEMP_DIR/modified.m3u8"
+awk -v base="$STREAMPATH" '
+  /^#/ {print; next}
+  /^https?:\/\// {print; next}
+  {print base $0}
+' "$TEMP_DIR/stream.m3u8" > "$TEMP_DIR/modified.m3u8"
 
-aria2c -x 10 --dir "$TEMP_DIR" --console-log-level warn -i "$TEMP_DIR/modified.m3u8"
+aria2c -x 10 --dir "$TEMP_DIR" --console-log-level warn --auto-file-renaming=false --allow-overwrite=true --remove-control-file=true -i "$TEMP_DIR/modified.m3u8"
+
+# 将文件名中的查询参数去掉（aria2 可能保留 ?type=live）
+find "$TEMP_DIR" -maxdepth 1 -type f -name '*\?*' | while read -r f; do
+  clean="${f%%\?*}"
+  mv "$f" "$clean"
+done
 
 # 生成指向本地分片的 m3u8
 awk -v dir="$TEMP_DIR" '{
-  if ($0 ~ /\.aac$/ && $0 !~ /^#/) print dir "/" $0; else print $0
+  if ($0 !~ /^#/ && $0 !~ /^https?:\/\//) {
+    sub(/\?.*$/, "", $0);
+    print dir "/" $0;
+  } else if ($0 ~ /^https?:\/\//) {
+    file=$0;
+    sub(/^.*\//,"",file);
+    sub(/\?.*$/,"",file);
+    print dir "/" file;
+  } else print $0
 }' "$TEMP_DIR/stream.m3u8" > "$TEMP_DIR/local.m3u8"
 
 # 合并为 m4a
