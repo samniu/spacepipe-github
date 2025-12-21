@@ -38,6 +38,7 @@ class Job:
         self.browser = browser
         self.out_root = out_root
         self.status = "queued"
+        self.error: Optional[str] = None
         self.started_at: Optional[str] = None
         self.finished_at: Optional[str] = None
         self.target_dir: Optional[str] = None
@@ -69,10 +70,12 @@ class Job:
                 if proc.returncode == 0:
                     self.status = "done"
                 else:
-                    self.status = f"error({proc.returncode})"
+                    self.status = "error"
+                    self.error = f"exit {proc.returncode}"
         except Exception as exc:  # noqa: BLE001
             self.finished_at = now_iso()
-            self.status = f"error({exc.__class__.__name__})"
+            self.status = "error"
+            self.error = f"{exc.__class__.__name__}: {exc}"
             with self.log_path.open("a", encoding="utf-8") as logf:
                 logf.write(f"\n[ERROR] {exc}\n")
 
@@ -101,18 +104,26 @@ def render_index(msg: str = "") -> bytes:
     rows = []
     for job in sorted(JOBS.values(), key=lambda j: j.started_at or "", reverse=True):
         status_class = (
-            "status-done" if job.status == "done" else "status-running" if job.status == "running" else "status-error"
-            if job.status.startswith("error") else ""
+            "status-done"
+            if job.status == "done"
+            else "status-running"
+            if job.status == "running"
+            else "status-error"
+            if job.status == "error"
+            else ""
         )
         log_link = f"<a href='/log?id={job.id}' target='_blank'>log</a>"
         target = html.escape(job.target_dir) if job.target_dir else "-"
+        status_text = html.escape(job.status)
+        if job.error:
+            status_text += f" — {html.escape(job.error)}"
         rows.append(
             "<tr>"
             f"<td>{job.id}</td>"
             f"<td>{html.escape(job.space_url)}</td>"
             f"<td>{html.escape(job.browser)}</td>"
             f"<td>{job.started_at or '-'}</td>"
-            f"<td class='{status_class}'>{job.status}</td>"
+            f"<td class='{status_class}'>{status_text}</td>"
             f"<td>{target}</td>"
             f"<td>{log_link}</td>"
             "</tr>"
