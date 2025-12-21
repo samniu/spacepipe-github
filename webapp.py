@@ -16,9 +16,9 @@ import json
 import threading
 import uuid
 from pathlib import Path
-from subprocess import Popen, PIPE, STDOUT
+from subprocess import PIPE, STDOUT, Popen, TimeoutExpired
 from typing import Dict, Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs
 from wsgiref.simple_server import make_server
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -43,7 +43,21 @@ class Job:
         self.finished_at: Optional[str] = None
         self.target_dir: Optional[str] = None
         self.log_path = LOG_DIR / f"{self.id}.log"
+        self.proc: Optional[Popen] = None
+        self.cancel_requested = False
         threading.Thread(target=self._run, daemon=True).start()
+
+    def cancel(self):
+        self.cancel_requested = True
+        if self.proc and self.proc.poll() is None:
+            try:
+                self.proc.terminate()
+                self.proc.wait(timeout=5)
+            except TimeoutExpired:
+                self.proc.kill()
+            self.status = "canceled"
+            self.finished_at = now_iso()
+            self.error = "canceled by user"
 
     def _run(self):
         self.status = "running"
@@ -58,20 +72,25 @@ class Job:
         try:
             with self.log_path.open("w", encoding="utf-8") as logf:
                 logf.write(f"[{self.started_at}] CMD: {' '.join(cmd)}\n")
-                proc = Popen(cmd, cwd=str(SCRIPT_DIR), stdout=PIPE, stderr=STDOUT, text=True)
-                assert proc.stdout is not None
-                for line in proc.stdout:
+                self.proc = Popen(cmd, cwd=str(SCRIPT_DIR), stdout=PIPE, stderr=STDOUT, text=True)
+                assert self.proc.stdout is not None
+                for line in self.proc.stdout:
                     logf.write(line)
                     logf.flush()
                     if "See:" in line:
                         self.target_dir = line.split("See:", 1)[-1].strip()
-                proc.wait()
+                    if self.cancel_requested:
+                        break
+                self.proc.wait()
                 self.finished_at = now_iso()
-                if proc.returncode == 0:
+                if self.cancel_requested:
+                    self.status = "canceled"
+                    self.error = "canceled by user"
+                elif self.proc.returncode == 0:
                     self.status = "done"
                 else:
                     self.status = "error"
-                    self.error = f"exit {proc.returncode}"
+                    self.error = f"exit {self.proc.returncode}"
         except Exception as exc:  # noqa: BLE001
             self.finished_at = now_iso()
             self.status = "error"
@@ -96,11 +115,41 @@ def html_page(body: str) -> bytes:
         f".status-running{{color:#d9822b;}}"
         f".status-done{{color:#107a3c;}}"
         f".status-error{{color:#c23030;}}"
-        f"</style></head><body>{body}</body></html>"
+        f".status-canceled{{color:#8a8a8a;}}"
+        f".actions form{{display:inline; margin-right:4px;}}"
+        f"</style>"
+        f"<script>"
+        f"let timer=null;"
+        f"function setAutoRefresh(on){{"
+        f"  const box=document.getElementById('auto');"
+        f"  if(on===undefined) on=box.checked;"
+        f"  if(on){{ timer=setInterval(()=>location.reload(),5000); }} else if(timer){{ clearInterval(timer); }}"
+        f"}}"
+        f"window.onload=()=>{{ const box=document.getElementById('auto'); if(box) setAutoRefresh(box.checked); }};"
+        f"</script>"
+        f"</head><body>{body}</body></html>"
     ).encode("utf-8")
 
 
 def render_index(msg: str = "") -> bytes:
+    def outputs_cell(job: Job) -> str:
+        if not job.target_dir:
+            return "-"
+        base = Path(job.target_dir)
+        links = []
+        if base.exists():
+            links.append(f"<a href='{base.as_uri()}' target='_blank'>dir</a>")
+        for rel, label in [
+            ("transcripts/transcript.txt", "txt"),
+            ("transcripts/transcript.srt", "srt"),
+            ("transcripts/transcript.md", "md"),
+            ("summaries/summary.md", "summary"),
+        ]:
+            p = base / rel
+            if p.exists():
+                links.append(f"<a href='{p.as_uri()}' target='_blank'>{label}</a>")
+        return " | ".join(links) if links else html.escape(job.target_dir)
+
     rows = []
     for job in sorted(JOBS.values(), key=lambda j: j.started_at or "", reverse=True):
         status_class = (
@@ -110,6 +159,8 @@ def render_index(msg: str = "") -> bytes:
             if job.status == "running"
             else "status-error"
             if job.status == "error"
+            else "status-canceled"
+            if job.status == "canceled"
             else ""
         )
         log_link = f"<a href='/log?id={job.id}' target='_blank'>log</a>"
@@ -117,6 +168,21 @@ def render_index(msg: str = "") -> bytes:
         status_text = html.escape(job.status)
         if job.error:
             status_text += f" — {html.escape(job.error)}"
+        actions = []
+        if job.status in {"queued", "running"}:
+            actions.append(
+                f"<form method='POST' action='/cancel'>"
+                f"<input type='hidden' name='id' value='{job.id}'>"
+                f"<button type='submit'>Cancel</button>"
+                f"</form>"
+            )
+        if job.status in {"error", "done", "canceled"}:
+            actions.append(
+                f"<form method='POST' action='/retry'>"
+                f"<input type='hidden' name='id' value='{job.id}'>"
+                f"<button type='submit'>Retry</button>"
+                f"</form>"
+            )
         rows.append(
             "<tr>"
             f"<td>{job.id}</td>"
@@ -125,6 +191,8 @@ def render_index(msg: str = "") -> bytes:
             f"<td>{job.started_at or '-'}</td>"
             f"<td class='{status_class}'>{status_text}</td>"
             f"<td>{target}</td>"
+            f"<td>{outputs_cell(job)}</td>"
+            f"<td class='actions'>{''.join(actions) or '-'}</td>"
             f"<td>{log_link}</td>"
             "</tr>"
         )
@@ -144,10 +212,14 @@ def render_index(msg: str = "") -> bytes:
         "</div>"
         "<div style='margin-top:12px;'><button type='submit'>Start</button></div>"
         "</form>"
+        "<div style='margin-top:12px;'>"
+        "<button onclick='location.reload()'>Refresh</button>"
+        "<label style='margin-left:12px;'><input type='checkbox' id='auto' checked onchange='setAutoRefresh(this.checked)'> Auto 5s</label>"
+        "</div>"
         "<h2>Jobs</h2>"
         "<table><tr><th>ID</th><th>URL</th><th>Browser</th><th>Started</th>"
-        "<th>Status</th><th>Target Dir</th><th>Log</th></tr>"
-        + ("\n".join(rows) if rows else "<tr><td colspan='7'>No jobs yet.</td></tr>")
+        "<th>Status</th><th>Target Dir</th><th>Outputs</th><th>Actions</th><th>Log</th></tr>"
+        + ("\n".join(rows) if rows else "<tr><td colspan='9'>No jobs yet.</td></tr>")
         + "</table>"
     )
     return html_page(body)
@@ -193,6 +265,31 @@ def application(environ, start_response):
         job = Job(space_url=space_url, browser=browser, out_root=Path(out_root))
         JOBS[job.id] = job
         start_response("303 See Other", [("Location", "/?msg=started")])
+        return [b""]
+
+    if method == "POST" and path == "/cancel":
+        data = environ["wsgi.input"].read(length).decode()
+        form = parse_qs(data)
+        job_id = form.get("id", [""])[0]
+        job = JOBS.get(job_id)
+        if not job:
+            start_response("404 Not Found", [("Content-Type", "text/plain")])
+            return [b"job not found"]
+        job.cancel()
+        start_response("303 See Other", [("Location", "/?msg=canceled")])
+        return [b""]
+
+    if method == "POST" and path == "/retry":
+        data = environ["wsgi.input"].read(length).decode()
+        form = parse_qs(data)
+        job_id = form.get("id", [""])[0]
+        old = JOBS.get(job_id)
+        if not old:
+            start_response("404 Not Found", [("Content-Type", "text/plain")])
+            return [b"job not found"]
+        new_job = Job(space_url=old.space_url, browser=old.browser, out_root=old.out_root)
+        JOBS[new_job.id] = new_job
+        start_response("303 See Other", [("Location", "/?msg=retried")])
         return [b""]
 
     if method == "GET" and path == "/log":
