@@ -17,6 +17,12 @@ def main():
     out_dir  = pathlib.Path(args.outdir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Allow pyannote checkpoints to load with torch 2.6+ weights_only default
+    try:
+        torch.serialization.add_safe_globals([torch.torch_version.TorchVersion])
+    except Exception:
+        pass
+
     # 读取前 N 分钟到内存（更快）
     waveform, sr = torchaudio.load(str(wav_path))
     max_samples = int(args.minutes * 60 * sr)

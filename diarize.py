@@ -1,5 +1,6 @@
 # diarize.py
 import os, sys, pathlib, csv
+import torch
 from pyannote.audio import Pipeline
 
 wav_path = pathlib.Path(sys.argv[1]).resolve()
@@ -7,6 +8,12 @@ out_dir = pathlib.Path(sys.argv[2]).resolve()
 out_dir.mkdir(parents=True, exist_ok=True)
 
 hf_token = os.getenv("HF_TOKEN", None)
+
+# torch 2.6+ defaults weights_only=True; allow pyannote checkpoints to load
+try:
+    torch.serialization.add_safe_globals([torch.torch_version.TorchVersion])
+except Exception:
+    pass
 
 def load_pipeline(token):
     try:
