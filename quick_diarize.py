@@ -2,6 +2,7 @@
 import os, sys, csv, argparse, pathlib, torch, torchaudio
 from pyannote.audio import Pipeline
 from pyannote.audio.core.task import Specifications, Problem, Resolution
+from pyannote.core import Annotation
 from pyannote.audio.pipelines.utils.hook import ProgressHook
 
 def main():
@@ -51,17 +52,34 @@ def main():
                     min_speakers=args.min_spk,
                     max_speakers=args.max_spk)
 
+    def as_annotation(diarization_result):
+        if hasattr(diarization_result, "itertracks"):
+            return diarization_result  # already Annotation-like
+        if hasattr(diarization_result, "to_annotation"):
+            try:
+                return diarization_result.to_annotation()
+            except Exception:
+                pass
+        if isinstance(diarization_result, dict):
+            for key in ("annotation", "diarization", "discrete", "result"):
+                val = diarization_result.get(key)
+                if val is not None and hasattr(val, "itertracks"):
+                    return val
+        raise ValueError("Unsupported diarization output type")
+
+    annotation = as_annotation(diar)
+
     # 输出（CSV + RTTM）
     csv_path  = out_dir / "segments_quick.csv"
     rttm_path = out_dir / "segments_quick.rttm"
 
     with open(csv_path, "w", newline="") as f:
         w = csv.writer(f); w.writerow(["speaker","start","end"])
-        for turn, _, spk in diar.itertracks(yield_label=True):
+        for turn, _, spk in annotation.itertracks(yield_label=True):
             w.writerow([spk, round(float(turn.start),2), round(float(turn.end),2)])
 
     with open(rttm_path, "w") as f:
-        diar.write_rttm(f)
+        annotation.write_rttm(f)
 
     print(f"[done] wrote: {csv_path}")
     print(f"[done] wrote: {rttm_path}")
