@@ -1,6 +1,7 @@
 # quick_diarize.py  — 仅处理音频前 N 分钟做快速验证
 import os, sys, csv, argparse, pathlib, torch, torchaudio
 from pyannote.audio import Pipeline
+from pyannote.audio.core.task import Specifications
 from pyannote.audio.pipelines.utils.hook import ProgressHook
 
 def main():
@@ -19,7 +20,7 @@ def main():
 
     # Allow pyannote checkpoints to load with torch 2.6+ weights_only default
     try:
-        torch.serialization.add_safe_globals([torch.torch_version.TorchVersion])
+        torch.serialization.add_safe_globals([torch.torch_version.TorchVersion, Specifications])
     except Exception:
         pass
 
