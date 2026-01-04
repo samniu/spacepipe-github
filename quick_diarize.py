@@ -53,19 +53,50 @@ def main():
                     max_speakers=args.max_spk)
 
     def as_annotation(diarization_result):
+        # direct Annotation
         if hasattr(diarization_result, "itertracks"):
-            return diarization_result  # already Annotation-like
+            return diarization_result
+        # has converter
         if hasattr(diarization_result, "to_annotation"):
             try:
                 return diarization_result.to_annotation()
             except Exception:
                 pass
+        # known attributes on newer pyannote outputs
+        for attr in ("annotation", "diarization", "discrete", "result"):
+            if hasattr(diarization_result, attr):
+                val = getattr(diarization_result, attr)
+                if val is not None:
+                    if hasattr(val, "itertracks"):
+                        return val
+                    if hasattr(val, "to_annotation"):
+                        try:
+                            return val.to_annotation()
+                        except Exception:
+                            pass
+        # dict-like
         if isinstance(diarization_result, dict):
             for key in ("annotation", "diarization", "discrete", "result"):
                 val = diarization_result.get(key)
-                if val is not None and hasattr(val, "itertracks"):
+                if val is not None:
+                    if hasattr(val, "itertracks"):
+                        return val
+                    if hasattr(val, "to_annotation"):
+                        try:
+                            return val.to_annotation()
+                        except Exception:
+                            pass
+        # brute force search in __dict__
+        if hasattr(diarization_result, "__dict__"):
+            for val in diarization_result.__dict__.values():
+                if hasattr(val, "itertracks"):
                     return val
-        raise ValueError("Unsupported diarization output type")
+                if hasattr(val, "to_annotation"):
+                    try:
+                        return val.to_annotation()
+                    except Exception:
+                        pass
+        raise ValueError(f"Unsupported diarization output type: {type(diarization_result)}")
 
     annotation = as_annotation(diar)
 
