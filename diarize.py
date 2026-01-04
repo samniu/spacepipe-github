@@ -2,7 +2,7 @@
 import os, sys, pathlib, csv
 import torch
 from pyannote.audio import Pipeline
-from pyannote.audio.core.task import Specifications
+from pyannote.audio.core.task import Specifications, Problem
 
 wav_path = pathlib.Path(sys.argv[1]).resolve()
 out_dir = pathlib.Path(sys.argv[2]).resolve()
@@ -12,7 +12,9 @@ hf_token = os.getenv("HF_TOKEN", None)
 
 # torch 2.6+ defaults weights_only=True; allow pyannote checkpoints to load
 try:
-    torch.serialization.add_safe_globals([torch.torch_version.TorchVersion, Specifications])
+    torch.serialization.add_safe_globals(
+        [torch.torch_version.TorchVersion, Specifications, Problem]
+    )
 except Exception:
     pass
 
