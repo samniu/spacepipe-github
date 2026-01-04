@@ -46,4 +46,7 @@ python3 split_by_topics.py "$TARGET_DIR"
 # 9) 生成文字稿与摘要
 python3 post_export.py "$TARGET_DIR"
 
+# 10) 清理中间文件（16k PCM）
+rm -f "$TARGET_DIR/audio_16k.wav"
+
 echo "Done. See: $TARGET_DIR"
