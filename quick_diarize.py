@@ -24,7 +24,10 @@ def main():
 
     # 加载 pipeline（使用环境变量 HF_TOKEN 或已登录的缓存）
     hf_token = os.getenv("HF_TOKEN", None) or True
-    pipe = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token=hf_token)
+    try:
+        pipe = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", token=hf_token)
+    except TypeError:
+        pipe = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token=hf_token)
 
     # 设备选择：MPS (Apple 芯片) > CUDA > CPU
     device = "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")

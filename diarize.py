@@ -8,18 +8,16 @@ out_dir.mkdir(parents=True, exist_ok=True)
 
 hf_token = os.getenv("HF_TOKEN", None)
 
+def load_pipeline(token):
+    try:
+        # pyannote.audio >=4 uses token=
+        return Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", token=token)
+    except TypeError:
+        # older signature
+        return Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token=token)
+
 try:
-    if hf_token:
-        pipeline = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization-3.1",
-            use_auth_token=hf_token
-        )
-    else:
-        # 已经 huggingface-cli login 的情况下可用 True
-        pipeline = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization-3.1",
-            use_auth_token=True
-        )
+    pipeline = load_pipeline(hf_token or True)
 except Exception as e:
     print("\n[ERROR] 无法下载/加载 pyannote/speaker-diarization-3.1：", e)
     print("请确认：1) 已登录 huggingface-cli；2) 已在模型页点击 Access/同意条款；")
@@ -27,7 +25,6 @@ except Exception as e:
     print("          rm -rf ~/.cache/huggingface/hub/models--pyannote--speaker-diarization-3.1\n")
     sys.exit(1)
 
-# pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1")
 diarization = pipeline(wav_path)
 
 # RTTM
