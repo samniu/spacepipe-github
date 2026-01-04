@@ -24,6 +24,12 @@ if [[ "$QUICK_MODE" == "1" ]]; then
   echo "[info] quick mode on (minutes=$QUICK_MINUTES)"
   # 3) 转16k WAV
   ffmpeg -y -i "$TARGET_DIR/$BASE_NAME.m4a" -ac 1 -ar 16000 "$TARGET_DIR/audio_16k.wav"
+  QT_SECS=$(python3 - <<PY
+import sys
+print(float(sys.argv[1]) * 60)
+PY
+"$QUICK_MINUTES")
+  ffmpeg -y -i "$TARGET_DIR/audio_16k.wav" -t "$QT_SECS" "$TARGET_DIR/audio_quick.wav"
 
   # 4) 快速 diarization
   python3 quick_diarize.py "$TARGET_DIR/audio_16k.wav" "$TARGET_DIR/diarization" --minutes "$QUICK_MINUTES"
@@ -31,7 +37,7 @@ if [[ "$QUICK_MODE" == "1" ]]; then
   cp "$TARGET_DIR/diarization/segments_quick_smoothed.csv" "$TARGET_DIR/diarization/segments_smoothed.csv" 2>/dev/null || true
 
   # 5) 快速 ASR（仍跑全程，若需仅前几分钟可自行裁剪）
-  python3 asr_whisper.py "$TARGET_DIR/audio_16k.wav" "$TARGET_DIR/asr_quick.json"
+  python3 asr_whisper.py "$TARGET_DIR/audio_quick.wav" "$TARGET_DIR/asr_quick.json"
   cp "$TARGET_DIR/asr_quick.json" "$TARGET_DIR/asr.json"
 
   # 6) 防碎片平滑
@@ -86,5 +92,6 @@ fi
 
 # 10) 清理中间文件（16k PCM）
 rm -f "$TARGET_DIR/audio_16k.wav"
+rm -f "$TARGET_DIR/audio_quick.wav"
 
 echo "Done. See: $TARGET_DIR"
