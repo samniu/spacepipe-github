@@ -32,11 +32,20 @@ def now_iso() -> str:
 
 
 class Job:
-    def __init__(self, space_url: str, browser: str, out_root: Path):
+    def __init__(
+        self,
+        space_url: str,
+        browser: str,
+        out_root: Path,
+        quick_mode: bool = False,
+        quick_minutes: str = "2",
+    ):
         self.id = uuid.uuid4().hex[:10]
         self.space_url = space_url
         self.browser = browser
         self.out_root = out_root
+        self.quick_mode = quick_mode
+        self.quick_minutes = quick_minutes
         self.status = "queued"
         self.error: Optional[str] = None
         self.started_at: Optional[str] = None
@@ -68,6 +77,8 @@ class Job:
             self.space_url,
             self.browser,
             str(self.out_root),
+            "1" if self.quick_mode else "0",
+            str(self.quick_minutes),
         ]
         try:
             with self.log_path.open("w", encoding="utf-8") as logf:
@@ -108,7 +119,7 @@ def html_page(body: str) -> bytes:
         f"<title>Space Pipeline</title>"
         f"<style>"
         f"body{{font-family:Menlo,monospace;margin:24px;}}"
-        f"input,button{{font-size:14px;padding:6px;}}"
+        f"input,button,select{{font-size:14px;padding:6px;}}"
         f"table{{border-collapse:collapse;width:100%;margin-top:16px;}}"
         f"th,td{{border:1px solid #ccc;padding:6px;text-align:left;}}"
         f"th{{background:#f5f5f5;}}"
@@ -117,6 +128,7 @@ def html_page(body: str) -> bytes:
         f".status-error{{color:#c23030;}}"
         f".status-canceled{{color:#8a8a8a;}}"
         f".actions form{{display:inline; margin-right:4px;}}"
+        f".preview{{background:#f7f7f7;padding:8px;border:1px solid #ddd;max-height:200px;overflow:auto;}}"
         f"</style>"
         f"<script>"
         f"let timer=null;"
@@ -132,6 +144,43 @@ def html_page(body: str) -> bytes:
 
 
 def render_index(msg: str = "") -> bytes:
+    def load_text(path: Path, limit: int = 1200) -> str:
+        if not path.exists():
+            return ""
+        txt = path.read_text(encoding="utf-8", errors="replace")
+        return txt[:limit] + ("..." if len(txt) > limit else "")
+
+    def outputs_cell(job: Job) -> str:
+        if not job.target_dir:
+            return "-"
+        base = Path(job.target_dir)
+        links = []
+        if base.exists():
+            links.append(f"<a href='{base.as_uri()}' target='_blank'>dir</a>")
+        for rel, label in [
+            ("transcripts/transcript.txt", "txt"),
+            ("transcripts/transcript.srt", "srt"),
+            ("transcripts/transcript.md", "md"),
+            ("summaries/summary.md", "summary"),
+        ]:
+            p = base / rel
+            if p.exists():
+                links.append(f"<a href='{p.as_uri()}' target='_blank'>{label}</a>")
+        return " | ".join(links) if links else html.escape(job.target_dir)
+
+    def preview_cell(job: Job) -> str:
+        if not job.target_dir:
+            return "-"
+        base = Path(job.target_dir)
+        summary = load_text(base / "summaries" / "summary.md", limit=800)
+        transcript = load_text(base / "transcripts" / "transcript.txt", limit=800)
+        parts = []
+        if summary:
+            parts.append("<div><strong>Summary</strong><div class='preview'>" + html.escape(summary) + "</div></div>")
+        if transcript:
+            parts.append("<div style='margin-top:6px;'><strong>Transcript</strong><div class='preview'>" + html.escape(transcript) + "</div></div>")
+        return "".join(parts) if parts else "-"
+
     def outputs_cell(job: Job) -> str:
         if not job.target_dir:
             return "-"
@@ -188,10 +237,12 @@ def render_index(msg: str = "") -> bytes:
             f"<td>{job.id}</td>"
             f"<td>{html.escape(job.space_url)}</td>"
             f"<td>{html.escape(job.browser)}</td>"
+            f"<td>{'quick' if job.quick_mode else 'full'}</td>"
             f"<td>{job.started_at or '-'}</td>"
             f"<td class='{status_class}'>{status_text}</td>"
             f"<td>{target}</td>"
             f"<td>{outputs_cell(job)}</td>"
+            f"<td>{preview_cell(job)}</td>"
             f"<td class='actions'>{''.join(actions) or '-'}</td>"
             f"<td>{log_link}</td>"
             "</tr>"
@@ -210,6 +261,10 @@ def render_index(msg: str = "") -> bytes:
         "<div style='margin-top:8px;'>"
         f"<label>Out root: <input name='out_root' value='{html.escape(str(DEFAULT_OUT))}' size='60'></label>"
         "</div>"
+        "<div style='margin-top:8px;'>"
+        "<label><input type='checkbox' name='quick' value='1'> Quick mode (front minutes only)</label>"
+        "<label style='margin-left:12px;'>Minutes: <input name='quick_minutes' value='2' size='4'></label>"
+        "</div>"
         "<div style='margin-top:12px;'><button type='submit'>Start</button></div>"
         "</form>"
         "<div style='margin-top:12px;'>"
@@ -217,9 +272,9 @@ def render_index(msg: str = "") -> bytes:
         "<label style='margin-left:12px;'><input type='checkbox' id='auto' checked onchange='setAutoRefresh(this.checked)'> Auto 5s</label>"
         "</div>"
         "<h2>Jobs</h2>"
-        "<table><tr><th>ID</th><th>URL</th><th>Browser</th><th>Started</th>"
-        "<th>Status</th><th>Target Dir</th><th>Outputs</th><th>Actions</th><th>Log</th></tr>"
-        + ("\n".join(rows) if rows else "<tr><td colspan='9'>No jobs yet.</td></tr>")
+        "<table><tr><th>ID</th><th>URL</th><th>Browser</th><th>Mode</th><th>Started</th>"
+        "<th>Status</th><th>Target Dir</th><th>Outputs</th><th>Preview</th><th>Actions</th><th>Log</th></tr>"
+        + ("\n".join(rows) if rows else "<tr><td colspan='11'>No jobs yet.</td></tr>")
         + "</table>"
     )
     return html_page(body)
@@ -258,11 +313,19 @@ def application(environ, start_response):
         space_url = form.get("space_url", [""])[0].strip()
         browser = form.get("browser", ["chrome"])[0].strip() or "chrome"
         out_root = form.get("out_root", [str(DEFAULT_OUT)])[0].strip() or str(DEFAULT_OUT)
+        quick = form.get("quick", ["0"])[0].strip() or "0"
+        quick_minutes = form.get("quick_minutes", ["2"])[0].strip() or "2"
         if not space_url:
             start_response("400 Bad Request", [("Content-Type", "text/plain")])
             return [b"space_url required"]
 
-        job = Job(space_url=space_url, browser=browser, out_root=Path(out_root))
+        job = Job(
+            space_url=space_url,
+            browser=browser,
+            out_root=Path(out_root),
+            quick_mode=quick == "1",
+            quick_minutes=quick_minutes,
+        )
         JOBS[job.id] = job
         start_response("303 See Other", [("Location", "/?msg=started")])
         return [b""]
