@@ -29,8 +29,19 @@ FINAL_FILE="$TARGET_DIR/$BASE_NAME.m4a"
 TEMP_DIR="$TARGET_DIR/.temp_chunks"
 mkdir -p "$TEMP_DIR"
 
+# 先尝试直接用 yt-dlp 下载为 m4a（最稳妥）
+if yt-dlp --cookies-from-browser "$BROWSER" -o "$FINAL_FILE" -x --audio-format m4a --audio-quality 0 "$SPACEURL"; then
+  echo "Saved (yt-dlp): $FINAL_FILE"
+  exit 0
+fi
+
+echo "[warn] yt-dlp direct download failed, fallback to m3u8 chunks..."
+
 # 下载 m3u8
-wget "$STREAM" -O "$TEMP_DIR/stream.m3u8"
+if ! wget "$STREAM" -O "$TEMP_DIR/stream.m3u8"; then
+  echo "[error] failed to download m3u8"
+  exit 1
+fi
 
 # 有的 m3u8 是相对路径，先推全，再下载到临时目录
 STREAMPATH=$(echo "$STREAM" | grep -Eo "(^.*[\/])" || true)
@@ -62,7 +73,11 @@ awk -v dir="$TEMP_DIR" '{
 }' "$TEMP_DIR/stream.m3u8" > "$TEMP_DIR/local.m3u8"
 
 # 合并为 m4a
-ffmpeg -y -protocol_whitelist file,concat -i "$TEMP_DIR/local.m3u8" -vn -acodec copy -movflags +faststart "$FINAL_FILE"
+if ! ffmpeg -y -protocol_whitelist file,concat -i "$TEMP_DIR/local.m3u8" -vn -acodec copy -movflags +faststart "$FINAL_FILE"; then
+  echo "[error] ffmpeg merge failed"
+  rm -rf "$TEMP_DIR"
+  exit 1
+fi
 
 # 清理
 rm -rf "$TEMP_DIR"
