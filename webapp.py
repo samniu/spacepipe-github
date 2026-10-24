@@ -121,14 +121,15 @@ def html_page(body: str) -> bytes:
         f"body{{font-family:Menlo,monospace;margin:24px;}}"
         f"input,button,select{{font-size:14px;padding:6px;}}"
         f"table{{border-collapse:collapse;width:100%;margin-top:16px;}}"
-        f"th,td{{border:1px solid #ccc;padding:6px;text-align:left;}}"
+        f"th,td{{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top;}}"
         f"th{{background:#f5f5f5;}}"
         f".status-running{{color:#d9822b;}}"
         f".status-done{{color:#107a3c;}}"
         f".status-error{{color:#c23030;}}"
         f".status-canceled{{color:#8a8a8a;}}"
         f".actions form{{display:inline; margin-right:4px;}}"
-        f".preview{{background:#f7f7f7;padding:8px;border:1px solid #ddd;max-height:200px;overflow:auto;}}"
+        f".preview{{background:#f7f7f7;padding:8px;border:1px solid #ddd;max-height:200px;overflow:auto;"
+        f"white-space:pre-wrap;min-width:360px;font-size:12px;}}"
         f"</style>"
         f"<script>"
         f"const formFields=['space_url','browser','out_root','quick_minutes'];"
@@ -183,24 +184,6 @@ def render_index(msg: str = "") -> bytes:
         if transcript:
             parts.append("<div style='margin-top:6px;'><strong>Transcript</strong><div class='preview'>" + html.escape(transcript) + "</div></div>")
         return "".join(parts) if parts else "-"
-
-    def outputs_cell(job: Job) -> str:
-        if not job.target_dir:
-            return "-"
-        base = Path(job.target_dir)
-        links = []
-        if base.exists():
-            links.append(f"<a href='{base.as_uri()}' target='_blank'>dir</a>")
-        for rel, label in [
-            ("transcripts/transcript.txt", "txt"),
-            ("transcripts/transcript.srt", "srt"),
-            ("transcripts/transcript.md", "md"),
-            ("summaries/summary.md", "summary"),
-        ]:
-            p = base / rel
-            if p.exists():
-                links.append(f"<a href='{p.as_uri()}' target='_blank'>{label}</a>")
-        return " | ".join(links) if links else html.escape(job.target_dir)
 
     rows = []
     for job in sorted(JOBS.values(), key=lambda j: j.started_at or "", reverse=True):
@@ -353,7 +336,13 @@ def application(environ, start_response):
         if not old:
             start_response("404 Not Found", [("Content-Type", "text/plain")])
             return [b"job not found"]
-        new_job = Job(space_url=old.space_url, browser=old.browser, out_root=old.out_root)
+        new_job = Job(
+            space_url=old.space_url,
+            browser=old.browser,
+            out_root=old.out_root,
+            quick_mode=old.quick_mode,
+            quick_minutes=old.quick_minutes,
+        )
         JOBS[new_job.id] = new_job
         start_response("303 See Other", [("Location", "/?msg=retried")])
         return [b""]
@@ -368,11 +357,35 @@ def application(environ, start_response):
     return [b"not found"]
 
 
+def add_demo_job() -> None:
+    """Show a finished job built from docs/demo so the UI can be tried without credentials."""
+    demo_dir = SCRIPT_DIR / "docs" / "demo"
+    job = Job.__new__(Job)  # skip __init__, which would start the real pipeline
+    job.id = "demo000001"
+    job.space_url = "https://x.com/i/spaces/DEMO"
+    job.browser = "chrome"
+    job.out_root = demo_dir.parent
+    job.quick_mode = False
+    job.quick_minutes = "2"
+    job.status = "done"
+    job.error = None
+    job.started_at = now_iso()
+    job.finished_at = job.started_at
+    job.target_dir = str(demo_dir)
+    job.log_path = demo_dir / "pipeline.log"
+    job.proc = None
+    job.cancel_requested = False
+    JOBS[job.id] = job
+
+
 def main():
     ap = argparse.ArgumentParser(description="Simple web UI for X Space pipeline")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--demo", action="store_true", help="preload a finished sample job from docs/demo")
     args = ap.parse_args()
+    if args.demo:
+        add_demo_job()
     print(f"[info] serving on http://{args.host}:{args.port}")
     print(f"[info] outputs root default: {DEFAULT_OUT}")
     with make_server(args.host, args.port, application) as httpd:
