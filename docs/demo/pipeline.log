@@ -1,0 +1,7 @@
+[demo] CMD: bash run_space_pipeline.sh https://x.com/i/spaces/DEMO chrome docs 0 2
+[info] using faster-whisper; device = cpu, compute_type = int8
+Detected language: en
+Diarization saved to: docs/demo/diarization
+Chapters -> docs/demo/chapters.json
+Transcript + summaries saved to: docs/demo
+Done. See: docs/demo

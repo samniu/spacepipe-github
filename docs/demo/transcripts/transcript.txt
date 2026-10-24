@@ -1,0 +1,12 @@
+[00:00:00] Welcome back to the weekly builders space. Today we are talking about AI tools for small teams.
+[00:00:06] Our first guest runs a two person design studio and uses speech to text every single day.
+[00:00:12] The biggest win for us was turning long client calls into searchable transcripts.
+[00:00:19] Before that we lost a lot of decisions because nobody remembered who said what.
+[00:00:26] Speaker labels matter more than people think, because a transcript without names is hard to trust.
+[00:00:33] Let's move on to cost. Running Whisper locally on a laptop is now fast enough for most meetings.
+[00:00:40] On an Apple silicon Mac the small model handles an hour of audio in a few minutes.
+[00:00:47] Cloud APIs are still easier to set up, but local models keep client audio private.
+[00:00:54] Privacy was the deciding factor for our clients in healthcare and legal work.
+[00:01:01] Last topic: what would you automate next if you had one more weekend?
+[00:01:08] I would split long recordings by topic so each chapter gets its own short summary.
+[00:01:15] That is exactly the kind of pipeline we will try to build together next week. Thanks everyone.

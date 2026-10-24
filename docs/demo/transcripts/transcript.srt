@@ -1,0 +1,47 @@
+1
+00:00:00,000 --> 00:00:06,200
+Welcome back to the weekly builders space. Today we are talking about AI tools for small teams.
+
+2
+00:00:06,200 --> 00:00:12,800
+Our first guest runs a two person design studio and uses speech to text every single day.
+
+3
+00:00:12,800 --> 00:00:19,500
+The biggest win for us was turning long client calls into searchable transcripts.
+
+4
+00:00:19,500 --> 00:00:26,000
+Before that we lost a lot of decisions because nobody remembered who said what.
+
+5
+00:00:26,000 --> 00:00:33,400
+Speaker labels matter more than people think, because a transcript without names is hard to trust.
+
+6
+00:00:33,400 --> 00:00:40,100
+Let's move on to cost. Running Whisper locally on a laptop is now fast enough for most meetings.
+
+7
+00:00:40,100 --> 00:00:47,700
+On an Apple silicon Mac the small model handles an hour of audio in a few minutes.
+
+8
+00:00:47,700 --> 00:00:54,300
+Cloud APIs are still easier to set up, but local models keep client audio private.
+
+9
+00:00:54,300 --> 00:01:01,000
+Privacy was the deciding factor for our clients in healthcare and legal work.
+
+10
+00:01:01,000 --> 00:01:08,600
+Last topic: what would you automate next if you had one more weekend?
+
+11
+00:01:08,600 --> 00:01:15,200
+I would split long recordings by topic so each chapter gets its own short summary.
+
+12
+00:01:15,200 --> 00:01:22,000
+That is exactly the kind of pipeline we will try to build together next week. Thanks everyone.

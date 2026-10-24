@@ -16,3 +16,7 @@ speakers/
 topics/
 spaces/
 spaces
+
+# sample output used by `webapp.py --demo`
+!docs/demo/
+!docs/demo/**

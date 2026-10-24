@@ -4,3 +4,7 @@ sentence-transformers
 ruptures
 torch
 torchaudio
+# optional: better Chinese summaries (word segmentation)
+jieba
+# optional: ASR fallback when faster-whisper is unavailable
+# openai-whisper

@@ -1,0 +1,62 @@
+[
+  {
+    "start": 0.0,
+    "end": 6.2,
+    "text": "Welcome back to the weekly builders space. Today we are talking about AI tools for small teams."
+  },
+  {
+    "start": 6.2,
+    "end": 12.8,
+    "text": "Our first guest runs a two person design studio and uses speech to text every single day."
+  },
+  {
+    "start": 12.8,
+    "end": 19.5,
+    "text": "The biggest win for us was turning long client calls into searchable transcripts."
+  },
+  {
+    "start": 19.5,
+    "end": 26.0,
+    "text": "Before that we lost a lot of decisions because nobody remembered who said what."
+  },
+  {
+    "start": 26.0,
+    "end": 33.4,
+    "text": "Speaker labels matter more than people think, because a transcript without names is hard to trust."
+  },
+  {
+    "start": 33.4,
+    "end": 40.1,
+    "text": "Let's move on to cost. Running Whisper locally on a laptop is now fast enough for most meetings."
+  },
+  {
+    "start": 40.1,
+    "end": 47.7,
+    "text": "On an Apple silicon Mac the small model handles an hour of audio in a few minutes."
+  },
+  {
+    "start": 47.7,
+    "end": 54.3,
+    "text": "Cloud APIs are still easier to set up, but local models keep client audio private."
+  },
+  {
+    "start": 54.3,
+    "end": 61.0,
+    "text": "Privacy was the deciding factor for our clients in healthcare and legal work."
+  },
+  {
+    "start": 61.0,
+    "end": 68.6,
+    "text": "Last topic: what would you automate next if you had one more weekend?"
+  },
+  {
+    "start": 68.6,
+    "end": 75.2,
+    "text": "I would split long recordings by topic so each chapter gets its own short summary."
+  },
+  {
+    "start": 75.2,
+    "end": 82.0,
+    "text": "That is exactly the kind of pipeline we will try to build together next week. Thanks everyone."
+  }
+]

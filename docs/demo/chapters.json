@@ -1,0 +1,17 @@
+[
+  {
+    "start": 0.0,
+    "end": 33.4,
+    "rep": "The biggest win for us was turning long client calls into searchable transcripts."
+  },
+  {
+    "start": 33.4,
+    "end": 61.0,
+    "rep": "Let's move on to cost. Running Whisper locally on a laptop is now fast enough for most meetings."
+  },
+  {
+    "start": 61.0,
+    "end": 82.0,
+    "rep": "I would split long recordings by topic so each chapter gets its own short summary."
+  }
+]
