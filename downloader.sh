@@ -60,7 +60,7 @@ mkdir -p "$TEMP_DIR"
 if [[ -n "$FFMPEG_T_SECS" && -f "$FINAL_FILE" ]]; then
   rm -f "$FINAL_FILE"
 fi
-if yt-dlp --cookies-from-browser "$BROWSER" -o "$FINAL_FILE" -x --audio-format m4a --audio-quality 0 "${YT_SECTIONS[@]}" "$SPACEURL"; then
+if yt-dlp --cookies-from-browser "$BROWSER" -o "$FINAL_FILE" -x --audio-format m4a --audio-quality 0 ${YT_SECTIONS[@]+"${YT_SECTIONS[@]}"} "$SPACEURL"; then
   echo "Saved (yt-dlp): $FINAL_FILE"
   exit 0
 fi
