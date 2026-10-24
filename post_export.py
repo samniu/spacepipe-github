@@ -115,17 +115,44 @@ STOPWORDS = set(
 )
 
 
+CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+
+try:
+    import jieba  # optional: proper Chinese word segmentation
+
+    jieba.setLogLevel(60)
+except ImportError:
+    jieba = None
+
+
 def tokenize(sentence: str) -> List[str]:
     # Keep simple alphanum + CJK; all lowercase for English tokens.
-    return re.findall(r"[\\w\\u4e00-\\u9fff']+", sentence.lower())
+    tokens = []
+    for run in re.findall(r"[\w\u4e00-\u9fff']+", sentence.lower()):
+        if not CJK_RE.search(run):
+            tokens.append(run)
+        elif jieba is not None:
+            tokens.extend(t for t in jieba.lcut(run) if t.strip())
+        else:
+            # Without jieba, fall back to overlapping character pairs.
+            tokens.extend(run[i : i + 2] for i in range(max(1, len(run) - 1)))
+    return tokens
 
 
 def split_sentences(text: str) -> List[str]:
-    return [s.strip() for s in re.split(r"(?<=[。！？.!?])\\s*", text) if s.strip()]
+    return [s.strip() for s in re.split(r"(?<=[。！？.!?])\s*", text) if s.strip()]
 
 
-def summarize_text(text: str, max_sentences: int = 3) -> List[str]:
-    sentences = split_sentences(text)
+def segment_sentences(texts: List[str]) -> List[str]:
+    # Whisper often returns Chinese without punctuation, so every ASR segment
+    # is also treated as a sentence boundary.
+    out = []
+    for text in texts:
+        out.extend(split_sentences(text))
+    return out
+
+
+def summarize_text(sentences: List[str], max_sentences: int = 3) -> List[str]:
     if not sentences:
         return []
     word_freq = Counter()
@@ -148,13 +175,13 @@ def summarize_text(text: str, max_sentences: int = 3) -> List[str]:
     return [t[2] for t in top_sorted]
 
 
-def gather_text(asr: List[Dict[str, Any]], start: float, end: float) -> str:
+def gather_texts(asr: List[Dict[str, Any]], start: float, end: float) -> List[str]:
     parts = []
     for seg in asr:
         if seg["end"] <= start or seg["start"] >= end:
             continue
         parts.append(seg["text"].strip())
-    return " ".join(parts)
+    return parts
 
 
 def summarize_chapters(
@@ -162,8 +189,8 @@ def summarize_chapters(
 ) -> List[Dict[str, Any]]:
     out = []
     for ch in chapters:
-        text = gather_text(asr, ch["start"], ch["end"])
-        summary = summarize_text(text, max_sentences=3)
+        sentences = segment_sentences(gather_texts(asr, ch["start"], ch["end"]))
+        summary = summarize_text(sentences, max_sentences=3)
         out.append(
             {
                 "start": ch["start"],
@@ -231,14 +258,20 @@ def main():
     asr = load_asr(base)
     chapters = load_chapters(base / "chapters.json")
 
-    write_plain_transcript(asr, base / "transcript.txt")
-    write_srt(asr, base / "transcript.srt")
-    write_markdown_transcript(base, asr, chapters)
+    # Same layout the web UI links to: transcripts/ and summaries/
+    transcripts_dir = base / "transcripts"
+    summaries_dir = base / "summaries"
+    transcripts_dir.mkdir(exist_ok=True)
+    summaries_dir.mkdir(exist_ok=True)
 
-    full_text = " ".join(seg["text"].strip() for seg in asr)
-    overall_summary = summarize_text(full_text, max_sentences=5)
+    write_plain_transcript(asr, transcripts_dir / "transcript.txt")
+    write_srt(asr, transcripts_dir / "transcript.srt")
+    write_markdown_transcript(transcripts_dir, asr, chapters)
+
+    all_sentences = segment_sentences([seg["text"].strip() for seg in asr])
+    overall_summary = summarize_text(all_sentences, max_sentences=5)
     chapter_summaries = summarize_chapters(chapters, asr) if chapters else []
-    write_summary_files(base, overall_summary, chapter_summaries)
+    write_summary_files(summaries_dir, overall_summary, chapter_summaries)
 
     print("Transcript + summaries saved to:", base)
 
