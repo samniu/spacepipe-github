@@ -55,33 +55,10 @@ fi
 TEMP_DIR="$TARGET_DIR/.temp_chunks"
 mkdir -p "$TEMP_DIR"
 
-# 先尝试直接用 yt-dlp 下载为 m4a（最稳妥）
-# quick 模式下如果已有旧文件，先删掉避免复用全量
-if [[ -n "$FFMPEG_T_SECS" && -f "$FINAL_FILE" ]]; then
-  rm -f "$FINAL_FILE"
-fi
-if yt-dlp --cookies-from-browser "$BROWSER" -o "$FINAL_FILE" -x --audio-format m4a --audio-quality 0 ${YT_SECTIONS[@]+"${YT_SECTIONS[@]}"} "$SPACEURL"; then
-  echo "Saved (yt-dlp): $FINAL_FILE"
-  exit 0
-fi
+# 用 aria2c 并行下载全部 m3u8 分片再合并（全量下载时最快）
+aria2_download() {
+  wget -q "$STREAM" -O "$TEMP_DIR/stream.m3u8" || return 1
 
-echo "[warn] yt-dlp direct download failed, fallback to m3u8 chunks..."
-
-# 下载 m3u8
-if ! wget "$STREAM" -O "$TEMP_DIR/stream.m3u8"; then
-  echo "[error] failed to download m3u8"
-  exit 1
-fi
-
-# quick 模式下只取前 N 分钟，则直接用 ffmpeg -t；否则继续分片下载
-if [[ -n "$FFMPEG_T_SECS" ]]; then
-  echo "[info] fallback ffmpeg -t $FFMPEG_T_SECS from m3u8"
-  if ! ffmpeg -y -t "$FFMPEG_T_SECS" -i "$STREAM" -vn -acodec copy -movflags +faststart "$FINAL_FILE"; then
-    echo "[error] ffmpeg partial fetch failed"
-    rm -rf "$TEMP_DIR"
-    exit 1
-  fi
-else
   # 有的 m3u8 是相对路径，先推全，再下载到临时目录
   STREAMPATH=$(echo "$STREAM" | grep -Eo "(^.*[\/])" || true)
   awk -v base="$STREAMPATH" '
@@ -90,7 +67,9 @@ else
     {print base $0}
   ' "$TEMP_DIR/stream.m3u8" > "$TEMP_DIR/modified.m3u8"
 
-  aria2c -x 10 --dir "$TEMP_DIR" --console-log-level warn --auto-file-renaming=false --allow-overwrite=true --remove-control-file=true -i "$TEMP_DIR/modified.m3u8"
+  aria2c -j 16 -x 10 --dir "$TEMP_DIR" --console-log-level warn --summary-interval=0 \
+    --auto-file-renaming=false --allow-overwrite=true --remove-control-file=true \
+    -i "$TEMP_DIR/modified.m3u8" || return 1
 
   # 将文件名中的查询参数去掉（aria2 可能保留 ?type=live）
   find "$TEMP_DIR" -maxdepth 1 -type f -name '*\?*' | while read -r f; do
@@ -112,14 +91,42 @@ else
   }' "$TEMP_DIR/stream.m3u8" > "$TEMP_DIR/local.m3u8"
 
   # 合并为 m4a
-  if ! ffmpeg -y -protocol_whitelist file,concat -i "$TEMP_DIR/local.m3u8" -vn -acodec copy -movflags +faststart "$FINAL_FILE"; then
-    echo "[error] ffmpeg merge failed"
+  ffmpeg -y -loglevel error -protocol_whitelist file,concat -i "$TEMP_DIR/local.m3u8" \
+    -vn -acodec copy -movflags +faststart "$FINAL_FILE"
+}
+
+if [[ -z "$FFMPEG_T_SECS" ]]; then
+  # 全量：先 aria2c 并行分片，失败再退回 yt-dlp
+  if aria2_download; then
     rm -rf "$TEMP_DIR"
-    exit 1
+    echo "Saved (aria2c): $FINAL_FILE"
+    exit 0
   fi
+  echo "[warn] aria2c chunk download failed, fallback to yt-dlp..."
+  if yt-dlp --cookies-from-browser "$BROWSER" -o "$FINAL_FILE" -x --audio-format m4a --audio-quality 0 "$SPACEURL"; then
+    rm -rf "$TEMP_DIR"
+    echo "Saved (yt-dlp): $FINAL_FILE"
+    exit 0
+  fi
+  echo "[error] download failed"
+  rm -rf "$TEMP_DIR"
+  exit 1
 fi
 
-# 清理
-rm -rf "$TEMP_DIR"
+# quick 模式：只取前 N 分钟。先删掉旧文件，避免复用全量
+rm -f "$FINAL_FILE"
+if yt-dlp --cookies-from-browser "$BROWSER" -o "$FINAL_FILE" -x --audio-format m4a --audio-quality 0 "${YT_SECTIONS[@]}" "$SPACEURL"; then
+  rm -rf "$TEMP_DIR"
+  echo "Saved (yt-dlp): $FINAL_FILE"
+  exit 0
+fi
 
+echo "[warn] yt-dlp partial download failed, fallback to ffmpeg -t $FFMPEG_T_SECS"
+if ! ffmpeg -y -t "$FFMPEG_T_SECS" -i "$STREAM" -vn -acodec copy -movflags +faststart "$FINAL_FILE"; then
+  echo "[error] ffmpeg partial fetch failed"
+  rm -rf "$TEMP_DIR"
+  exit 1
+fi
+
+rm -rf "$TEMP_DIR"
 echo "Saved: $FINAL_FILE"
