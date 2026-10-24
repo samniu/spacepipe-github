@@ -84,6 +84,20 @@ bash run_space_pipeline.sh "https://x.com/i/spaces/XXXX" chrome ~/Downloads/spac
 
 Arguments: `<space_url> [browser] [out_root] [quick_mode 0|1] [quick_minutes]`.
 
+To download the audio only, without transcription:
+
+```bash
+./downloader.sh "https://x.com/i/spaces/XXXX" chrome ~/Downloads/spaces       # whole Space
+./downloader.sh "https://x.com/i/spaces/XXXX" chrome ~/Downloads/spaces 3     # first 3 minutes
+```
+
+Tip: add a shell shortcut to `~/.zshrc` so you can run `xspace <url>` from anywhere:
+
+```bash
+_xspace() { (cd ~/path/to/spacepipe-github && ./downloader.sh "$1" chrome "$HOME/Downloads/spaces" "${2:-}"); }
+alias xspace='noglob _xspace'   # noglob: paste URLs containing "?" without quotes
+```
+
 ## Outputs
 
 Each Space gets its own folder named `<date> - <title>`:
