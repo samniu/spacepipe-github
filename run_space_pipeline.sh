@@ -13,8 +13,12 @@ if [[ -z "$SPACEURL" ]]; then
   exit 1
 fi
 
-# 1) 下载
-./downloader.sh "$SPACEURL" "$BROWSER" "$OUT_ROOT"
+# 1) 下载（quick 模式下只取前 N 分钟）
+if [[ "$QUICK_MODE" == "1" ]]; then
+  ./downloader.sh "$SPACEURL" "$BROWSER" "$OUT_ROOT" "$QUICK_MINUTES"
+else
+  ./downloader.sh "$SPACEURL" "$BROWSER" "$OUT_ROOT"
+fi
 
 # 2) 寻找最新目录（按时间排序取最后一个）
 TARGET_DIR=$(ls -dt "$OUT_ROOT"/*/ | head -n1 | sed 's:/*$::')
@@ -22,17 +26,17 @@ BASE_NAME=$(basename "$TARGET_DIR")
 
 if [[ "$QUICK_MODE" == "1" ]]; then
   echo "[info] quick mode on (minutes=$QUICK_MINUTES)"
-  # 3) 转16k WAV
-  ffmpeg -y -i "$TARGET_DIR/$BASE_NAME.m4a" -ac 1 -ar 16000 "$TARGET_DIR/audio_16k.wav"
-  QT_SECS=$(python3 - <<PY
+  # 3) 转16k WAV（仅前 N 分钟）
+  QT_SECS=$(python3 - "$QUICK_MINUTES" <<'PY'
 import sys
 print(float(sys.argv[1]) * 60)
 PY
-"$QUICK_MINUTES")
-  ffmpeg -y -i "$TARGET_DIR/audio_16k.wav" -t "$QT_SECS" "$TARGET_DIR/audio_quick.wav"
+)
+  ffmpeg -y -i "$TARGET_DIR/$BASE_NAME.m4a" -ac 1 -ar 16000 -t "$QT_SECS" "$TARGET_DIR/audio_quick.wav"
+  cp "$TARGET_DIR/audio_quick.wav" "$TARGET_DIR/audio_16k.wav"
 
   # 4) 快速 diarization
-  python3 quick_diarize.py "$TARGET_DIR/audio_16k.wav" "$TARGET_DIR/diarization" --minutes "$QUICK_MINUTES"
+  python3 quick_diarize.py "$TARGET_DIR/audio_quick.wav" "$TARGET_DIR/diarization" --minutes "$QUICK_MINUTES"
   mv "$TARGET_DIR/diarization/segments_quick.csv" "$TARGET_DIR/diarization/segments.csv"
   cp "$TARGET_DIR/diarization/segments_quick_smoothed.csv" "$TARGET_DIR/diarization/segments_smoothed.csv" 2>/dev/null || true
 
